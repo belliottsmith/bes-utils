@@ -29,6 +29,8 @@ import java.util.function.Function;
  * We never insert in the middle of the list, deletion is permanent, and we never remove the tail. As such, interleavings
  * can at most corrupt a deleted portion of the list, potentially reintroducing nodes, or resulting in next/prev links
  * reflecting slightly different lists, but neither of these break our constraints.
+ *
+ * TODO: use cas when detect competition
  */
 public class AbstractSimpleCollection<N extends AbstractSimpleCollection.Node>
 {
@@ -64,8 +66,7 @@ public class AbstractSimpleCollection<N extends AbstractSimpleCollection.Node>
                 insert.prev = tail;
                 if (!nextUpdater.compareAndSet(tail, null, insert))
                     continue;
-                // no need for atomicity
-                this.tail = insert;
+                tailUpdater.compareAndSet(this, tail, insert);
                 return;
             }
             tail = next;
@@ -242,7 +243,7 @@ public class AbstractSimpleCollection<N extends AbstractSimpleCollection.Node>
         if (ep == null)
         {
             nextUpdater.lazySet(rp, next);
-            head = dp;
+            headUpdater.compareAndSet(this, rp, dp);
         }
         else
         {
@@ -328,9 +329,13 @@ public class AbstractSimpleCollection<N extends AbstractSimpleCollection.Node>
             h = n;
         }
         if (ph != h)
-            head = h;
+            headUpdater.compareAndSet(this, ph, h);
     }
 
     private static final AtomicReferenceFieldUpdater<AbstractSimpleCollection.Node, AbstractSimpleCollection.Node>
     nextUpdater = AtomicReferenceFieldUpdater.newUpdater(AbstractSimpleCollection.Node.class, AbstractSimpleCollection.Node.class, "next");
+
+    private static final AtomicReferenceFieldUpdater<AbstractSimpleCollection, AbstractSimpleCollection.Node>
+    headUpdater = AtomicReferenceFieldUpdater.newUpdater(AbstractSimpleCollection.class, AbstractSimpleCollection.Node.class, "head"),
+    tailUpdater = AtomicReferenceFieldUpdater.newUpdater(AbstractSimpleCollection.class, AbstractSimpleCollection.Node.class, "tail");
 }
